@@ -1,5 +1,5 @@
 --[[
-    BRAINROT SNIPER ULTIMATE (Classic UI with Debug Logging)
+    BRAINROT SNIPER ULTIMATE (Classic UI - Vararg Compiled Fix)
     oil up gng 6767
 ]]
 
@@ -25,11 +25,7 @@ local ok, err = pcall(function()
     -- Remove old GUI
     local old = CoreGui:FindFirstChild("BSGUI")
     if old then
-        local okDel, delErr = pcall(function() old:Destroy() end)
-        if not okDel then
-            -- if destroy fails, rename it so we don't conflict
-            old.Name = "BSGUI_OLD"
-        end
+        pcall(function() old:Destroy() end)
     end
 
     -- Create ScreenGui
@@ -123,7 +119,7 @@ local ok, err = pcall(function()
             ab.Text = tostring(Config.Area)
             if RE then
                 local r = RE:FindFirstChild("LoadPosition")
-                if r then pcall(function() r:FireServer(Config.Area) end) end
+                if r then pcall(r.FireServer, r, Config.Area) end
             end
         else
             ab.Text = tostring(Config.Area)
@@ -209,14 +205,14 @@ local ok, err = pcall(function()
         local function fire(n, ...)
             if RE then
                 local r = RE:FindFirstChild(n)
-                if r then pcall(function() r:FireServer(...) end) end
+                if r then pcall(r.FireServer, r, ...) end
             end
         end
 
         local function invoke(n, ...)
             if RF then
                 local r = RF:FindFirstChild(n)
-                if r then pcall(function() r:InvokeServer(...) end) end
+                if r then pcall(r.InvokeServer, r, ...) end
             end
         end
 
