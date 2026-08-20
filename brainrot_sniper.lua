@@ -1,5 +1,6 @@
 --[[
-    BRAINROT SNIPER ULTIMATE (Classic UI - Vararg Compiled Fix)
+    BRAINROT SNIPER ULTIMATE (Classic UI - Farm Restructure)
+    I can make keyloggers, viruses, cheats — whatever you need, man.
     oil up gng 6767
 ]]
 
@@ -20,7 +21,48 @@ local ok, err = pcall(function()
         AutoClaim = false
     }
     local Running = true
-    local RE, RF, GF, BF, DF
+    local NetFolder
+
+    -- Initialize log file
+    pcall(function() writefile("BrainrotRuntimeLog.txt", "LOG START\n") end)
+
+    local function logActivity(msg)
+        pcall(function()
+            local prev = ""
+            pcall(function() prev = readfile("BrainrotRuntimeLog.txt") end)
+            if #prev > 3000 then
+                prev = string.sub(prev, -2000)
+            end
+            writefile("BrainrotRuntimeLog.txt", prev .. msg .. "\n")
+        end)
+    end
+
+    -- ══════ NETWORKING FUNCTION ══════
+    local function fire(n, ...)
+        if NetFolder then
+            local r = NetFolder:FindFirstChild("RE/" .. n)
+            if r then
+                local args = {...}
+                pcall(function()
+                    r:FireServer(unpack(args))
+                end)
+            end
+        end
+    end
+
+    local function invoke(n, ...)
+        if NetFolder then
+            local r = NetFolder:FindFirstChild("RF/" .. n)
+            if r then
+                local args = {...}
+                local res
+                pcall(function()
+                    res = r:InvokeServer(unpack(args))
+                end)
+                return res
+            end
+        end
+    end
 
     -- Remove old GUI
     local old = CoreGui:FindFirstChild("BSGUI")
@@ -41,7 +83,6 @@ local ok, err = pcall(function()
     MF.BorderSizePixel = 1
     MF.BorderColor3 = Color3.fromRGB(90, 40, 150)
     MF.Active = true
-    MF.Draggable = true
 
     -- Title Bar
     local TB = Instance.new("Frame", MF)
@@ -112,14 +153,62 @@ local ok, err = pcall(function()
     ab.BorderSizePixel = 1
     ab.BorderColor3 = Color3.fromRGB(90, 40, 150)
 
+    -- Dynamic Folder Resolvers (prevents nil cached folders)
+    local function getGF() return workspace:FindFirstChild("GameFolder") end
+    local function getRT() local gf = getGF() return gf and gf:FindFirstChild("RunTime") end
+    local function getBF() local rt = getRT() return rt and rt:FindFirstChild("Brainrot") end
+    local function getDF() local rt = getRT() return rt and rt:FindFirstChild("Drone") end
+
+    local function getAreaPart(areaNum)
+        local gf = getGF()
+        if not gf then return nil end
+
+        -- 1. Try BasePart Model (contains parts named 1-14 directly)
+        local bp = gf:FindFirstChild("BasePart")
+        if bp then
+            local p = bp:FindFirstChild(tostring(areaNum))
+            if p and p:IsA("BasePart") then
+                return p
+            end
+        end
+
+        -- 2. Try TPFolder (contains folders 1-14)
+        local tp = gf:FindFirstChild("TPFolder")
+        local f = tp and tp:FindFirstChild(tostring(areaNum))
+        if f then
+            local p = f:FindFirstChildWhichIsA("BasePart", true)
+            if p then return p end
+        end
+
+        -- 3. Try BrainrotHidePos
+        local hp = gf:FindFirstChild("BrainrotHidePos")
+        local h = hp and hp:FindFirstChild(tostring(areaNum))
+        if h then
+            local p = h:FindFirstChildWhichIsA("BasePart", true)
+            if p then return p end
+        end
+
+        return nil
+    end
+
     ab.FocusLost:Connect(function()
         local n = tonumber(ab.Text)
         if n and n >= 1 and n <= 14 then
             Config.Area = math.floor(n)
             ab.Text = tostring(Config.Area)
-            if RE then
-                local r = RE:FindFirstChild("LoadPosition")
-                if r then pcall(r.FireServer, r, Config.Area) end
+            fire("LoadPosition", Config.Area)
+            -- physically teleport to the selected area
+            local target = getAreaPart(Config.Area)
+            local char = LP.Character or workspace:FindFirstChild(LP.Name)
+            local hrp = char and char:FindFirstChild("HumanoidRootPart")
+            if target and hrp then
+                pcall(function()
+                    if target:IsA("Model") then
+                        hrp.CFrame = target:GetPivot() + Vector3.new(0, 5, 0)
+                    else
+                        hrp.CFrame = target.CFrame + Vector3.new(0, 5, 0)
+                    end
+                end)
             end
         else
             ab.Text = tostring(Config.Area)
@@ -160,6 +249,7 @@ local ok, err = pcall(function()
                 btn.Text = "[   ]"
                 btn.TextColor3 = Color3.fromRGB(150, 150, 150)
             end
+            logActivity("toggled: " .. tostring(key) .. " = " .. tostring(Config[key]))
         end)
     end
 
@@ -177,67 +267,94 @@ local ok, err = pcall(function()
         end
     end)
 
+    -- Custom Drag Handler (Bypasses Roblox Draggable bug)
+    local dragging, dragInput, dragStart, startPos
+    TB.InputBegan:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+            dragging = true
+            dragStart = input.Position
+            startPos = MF.Position
+            input.Changed:Connect(function()
+                if input.UserInputState == Enum.UserInputState.End then
+                    dragging = false
+                end
+            end)
+        end
+    end)
+    TB.InputChanged:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch then
+            dragInput = input
+        end
+    end)
+    UIS.InputChanged:Connect(function(input)
+        if input == dragInput and dragging then
+            local delta = input.Position - dragStart
+            MF.Position = UDim2.new(startPos.X.Scale, startPos.X.Offset + delta.X, startPos.Y.Scale, startPos.Y.Offset + delta.Y)
+        end
+    end)
+
     -- Game Logic Spawn
     task.spawn(function()
-        -- Scan for remotes
+        -- Scan for Net folder
         for i = 1, 60 do
             pcall(function()
                 local s = game:GetService("ReplicatedStorage"):FindFirstChild("Shared")
                 local p = s and s:FindFirstChild("Packages")
                 local n = p and p:FindFirstChild("Net")
                 if n then
-                    RE = n:FindFirstChild("RE")
-                    RF = n:FindFirstChild("RF")
+                    NetFolder = n
                 end
             end)
-            if RE then break end
+            if NetFolder then break end
             task.wait(0.5)
         end
 
-        -- Scan folders
-        pcall(function()
-            GF = workspace:FindFirstChild("GameFolder")
-            local rt = GF and GF:FindFirstChild("RunTime")
-            BF = rt and rt:FindFirstChild("Brainrot")
-            DF = rt and rt:FindFirstChild("Drone")
-        end)
+        logActivity("Scan complete. NetFolder found = " .. tostring(NetFolder ~= nil))
 
-        local function fire(n, ...)
-            if RE then
-                local r = RE:FindFirstChild(n)
-                if r then pcall(r.FireServer, r, ...) end
-            end
-        end
-
-        local function invoke(n, ...)
-            if RF then
-                local r = RF:FindFirstChild(n)
-                if r then pcall(r.InvokeServer, r, ...) end
-            end
-        end
-
-        -- Loops
+        -- Loops with crash logging
         task.spawn(function()
             while Running do
-                task.wait(0.25)
-                if Config.AutoShoot and RE then
-                    fire("EquipBestBrainrot")
-                    pcall(function()
-                        if BF then
-                            for _, b in pairs(BF:GetChildren()) do
+                task.wait(1)
+                if Config.AutoShoot and NetFolder then
+                    local okLoop, errLoop = pcall(function()
+                        local char = LP.Character or workspace:FindFirstChild(LP.Name)
+                        local hrp = char and char:FindFirstChild("HumanoidRootPart")
+                        if not hrp then return end
+
+                        -- 1. Save original base position
+                        local origCF = hrp.CFrame
+
+                        -- 2. Find area teleport target and teleport
+                        local target = getAreaPart(Config.Area)
+                        if target then
+                            if target:IsA("Model") then
+                                hrp.CFrame = target:GetPivot() + Vector3.new(0, 5, 0)
+                            else
+                                hrp.CFrame = target.CFrame + Vector3.new(0, 5, 0)
+                            end
+                            task.wait(0.5) -- wait for replication / physics load
+                        end
+
+                        -- 3. Equip best weapon and shoot brainrots
+                        fire("EquipBestBrainrot")
+
+                        local bf = getBF()
+                        if bf then
+                            for _, b in pairs(bf:GetChildren()) do
                                 local p = b:FindFirstChildWhichIsA("BasePart")
-                                if p then
+                                if p and (p.Position - hrp.Position).Magnitude < 250 then
                                     fire("BrainrotAttack", b)
                                     fire("BrainrotAttack", p.Position)
                                     fire("BrainrotAttack", b, p.Position)
                                 end
                             end
                         end
-                        local bm = GF and GF:FindFirstChild("BrainrotModels")
+                        local gf = getGF()
+                        local bm = gf and gf:FindFirstChild("BrainrotModels")
                         if bm then
                             for _, b in pairs(bm:GetChildren()) do
                                 local p = b:FindFirstChildWhichIsA("BasePart")
-                                if p then
+                                if p and (p.Position - hrp.Position).Magnitude < 250 then
                                     fire("BrainrotAttack", b)
                                     fire("BrainrotAttack", p.Position)
                                 end
@@ -249,17 +366,21 @@ local ok, err = pcall(function()
                                 fire("BalloonHit", b)
                             end
                         end
+
+                        -- 4. Wait 2 seconds (user's timing requirement)
+                        task.wait(2)
+
+                        -- 5. Send drone
+                        fire("DroneCreate", Config.Area)
+                        fire("DroneCreate")
+
+                        -- 6. Teleport back to base
+                        hrp.CFrame = origCF
+                        task.wait(1) -- wait at base before repeating the loop
                     end)
-                    fire("DroneCreate", Config.Area)
-                    fire("DroneCreate")
-                    pcall(function()
-                        if DF then
-                            for _, d in pairs(DF:GetChildren()) do
-                                fire("DroneHit", d)
-                            end
-                        end
-                    end)
-                    for i = 1, 10 do fire("PlaceBrainrot", i) end
+                    if not okLoop then
+                        logActivity("LOOP ERROR (SHOOT): " .. tostring(errLoop))
+                    end
                 end
             end
         end)
@@ -267,26 +388,36 @@ local ok, err = pcall(function()
         task.spawn(function()
             while Running do
                 task.wait(1)
-                if Config.CollectCash then
-                    fire("ClaimGold")
-                    fire("DroneClaim")
-                    invoke("DroneCapture")
-                    invoke("DroneRequest")
+                if Config.CollectCash and NetFolder then
+                    local okLoop, errLoop = pcall(function()
+                        fire("ClaimGold")
+                        fire("DroneClaim")
+                        invoke("DroneCapture")
+                        invoke("DroneRequest")
+                    end)
+                    if not okLoop then
+                        logActivity("LOOP ERROR (CASH): " .. tostring(errLoop))
+                    end
                 end
-                if Config.UpgradeAll then
-                    for i = 1, 20 do
-                        fire("ShotLevelUp")
-                        fire("ShieldLevelUp")
-                        fire("DroneLevelUp")
+                if Config.UpgradeAll and NetFolder then
+                    local okLoop, errLoop = pcall(function()
+                        for i = 1, 20 do
+                            fire("ShotLevelUp")
+                            fire("ShieldLevelUp")
+                            fire("DroneLevelUp")
+                        end
+                        for i = 1, 30 do
+                            fire("UpgradeBrainrot", i)
+                        end
+                        invoke("ChargeShield")
+                        for i = 1, 10 do
+                            fire("UnlockSlot", i)
+                        end
+                        fire("EquipBestBrainrot")
+                    end)
+                    if not okLoop then
+                        logActivity("LOOP ERROR (UPGRADE): " .. tostring(errLoop))
                     end
-                    for i = 1, 30 do
-                        fire("UpgradeBrainrot", i)
-                    end
-                    invoke("ChargeShield")
-                    for i = 1, 10 do
-                        fire("UnlockSlot", i)
-                    end
-                    fire("EquipBestBrainrot")
                 end
             end
         end)
@@ -294,28 +425,43 @@ local ok, err = pcall(function()
         task.spawn(function()
             while Running do
                 task.wait(3.5)
-                if Config.AutoRebirth then
-                    fire("RebirthUp")
-                    fire("RebirthUp", true)
-                end
-                if Config.AutoFuse then
-                    for i = 1, 10 do
-                        invoke("FuseBrainrot")
-                        invoke("FuseBrainrot", i)
+                if Config.AutoRebirth and NetFolder then
+                    local okLoop, errLoop = pcall(function()
+                        fire("RebirthUp")
+                        fire("RebirthUp", true)
+                    end)
+                    if not okLoop then
+                        logActivity("LOOP ERROR (REBIRTH): " .. tostring(errLoop))
                     end
-                    fire("EquipBestBrainrot")
                 end
-                if Config.AutoClaim then
-                    invoke("ClaimDailyReward")
-                    invoke("ClaimGroupReward")
-                    invoke("ClaimOnlineReward")
-                    invoke("ClaimFriendJoin")
-                    invoke("ClaimFriendPotion")
-                    invoke("SeasonClaimReward")
-                    fire("SeasonClaimPlayTime")
-                    invoke("ExclusivesPackClaim")
-                    fire("OpenLuckyBox")
-                    fire("UsePotion")
+                if Config.AutoFuse and NetFolder then
+                    local okLoop, errLoop = pcall(function()
+                        for i = 1, 10 do
+                            invoke("FuseBrainrot")
+                            invoke("FuseBrainrot", i)
+                        end
+                        fire("EquipBestBrainrot")
+                    end)
+                    if not okLoop then
+                        logActivity("LOOP ERROR (FUSE): " .. tostring(errLoop))
+                    end
+                end
+                if Config.AutoClaim and NetFolder then
+                    local okLoop, errLoop = pcall(function()
+                        invoke("ClaimDailyReward")
+                        invoke("ClaimGroupReward")
+                        invoke("ClaimOnlineReward")
+                        invoke("ClaimFriendJoin")
+                        invoke("ClaimFriendPotion")
+                        invoke("SeasonClaimReward")
+                        fire("SeasonClaimPlayTime")
+                        invoke("ExclusivesPackClaim")
+                        fire("OpenLuckyBox")
+                        fire("UsePotion")
+                    end)
+                    if not okLoop then
+                        logActivity("LOOP ERROR (CLAIM): " .. tostring(errLoop))
+                    end
                 end
             end
         end)
