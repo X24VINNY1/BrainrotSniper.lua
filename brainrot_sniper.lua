@@ -1,14 +1,14 @@
 --[[
-    BRAINROT SNIPER v3 — Xeno Executor
-    real remotes — GUI loads first
+    BRAINROT SNIPER v4 — Xeno Executor
+    CoreGui fix — real remotes
     oil up gng 6767
 ]]
 local Players = game:GetService("Players")
+local CoreGui = game:GetService("CoreGui")
 local RS = game:GetService("ReplicatedStorage")
 local UIS = game:GetService("UserInputService")
 local LP = Players.LocalPlayer
 
--- ══════ CONFIG ══════
 local Config = {
     SelectedArea = 12,
     AutoShoot = false,
@@ -18,9 +18,9 @@ local Config = {
 }
 local Running = true
 
--- ══════ GUI FIRST (so it always shows) ══════
-local old = LP.PlayerGui:FindFirstChild("BSGUI"); if old then old:Destroy() end
-local SG = Instance.new("ScreenGui"); SG.Name="BSGUI"; SG.ResetOnSpawn=false; SG.Parent=LP.PlayerGui
+-- ══════ GUI (CoreGui so it shows in Xeno) ══════
+local old = CoreGui:FindFirstChild("BSGUI"); if old then old:Destroy() end
+local SG = Instance.new("ScreenGui"); SG.Name="BSGUI"; SG.Parent=CoreGui
 
 local MF = Instance.new("Frame"); MF.Size=UDim2.new(0,260,0,250); MF.Position=UDim2.new(0.02,0,0.3,0)
 MF.BackgroundColor3=Color3.fromRGB(25,25,30); MF.BorderSizePixel=0; MF.Active=true; MF.Draggable=true; MF.Parent=SG
@@ -71,7 +71,7 @@ mkToggle("Collect Cash",2,"CollectCash")
 mkToggle("Upgrade All",3,"UpgradeAll")
 mkToggle("Auto Rebirth",4,"AutoRebirth")
 
--- ══════ GRAB REMOTES (safe, no hang) ══════
+-- ══════ GRAB REMOTES ══════
 local RE, RF
 
 local function getRemote(folder, name)
@@ -80,34 +80,22 @@ local function getRemote(folder, name)
 end
 
 task.spawn(function()
-    -- wait for net folder with timeout
-    local net = RS:FindFirstChild("Shared")
-    if net then net = net:FindFirstChild("Packages") end
-    if net then net = net:FindFirstChild("Net") end
-
-    -- if not found immediately, wait a bit
-    if not net then
-        for i = 1, 30 do
-            task.wait(0.5)
-            net = RS:FindFirstChild("Shared")
-            if net then net = net:FindFirstChild("Packages") end
-            if net then net = net:FindFirstChild("Net") end
-            if net then break end
+    local net = nil
+    for i = 1, 30 do
+        local shared = RS:FindFirstChild("Shared")
+        if shared then
+            local pkgs = shared:FindFirstChild("Packages")
+            if pkgs then
+                net = pkgs:FindFirstChild("Net")
+                if net then break end
+            end
         end
+        task.wait(0.5)
     end
 
-    if not net then
-        warn("[BRAINROT SNIPER] could not find Net folder")
-        return
-    end
-
-    RE = net:FindFirstChild("RE")
-    RF = net:FindFirstChild("RF")
-
-    if RE then
-        print("[BRAINROT SNIPER] remotes loaded — ready to go")
-    else
-        warn("[BRAINROT SNIPER] RE folder not found")
+    if net then
+        RE = net:FindFirstChild("RE")
+        RF = net:FindFirstChild("RF")
     end
 end)
 
@@ -117,10 +105,8 @@ ab.FocusLost:Connect(function()
     if n and n>=1 and n<=15 then
         Config.SelectedArea=math.floor(n)
         ab.Text=tostring(Config.SelectedArea)
-        if RE then
-            local r = getRemote(RE, "LoadPosition")
-            if r then pcall(function() r:FireServer(Config.SelectedArea) end) end
-        end
+        local r = getRemote(RE, "LoadPosition")
+        if r then pcall(function() r:FireServer(Config.SelectedArea) end) end
     else
         ab.Text=tostring(Config.SelectedArea)
     end
@@ -130,19 +116,16 @@ end)
 local function doAutoShoot()
     if not RE then return end
 
-    -- equip best brainrot
     local r = getRemote(RE, "EquipBestBrainrot")
     if r then pcall(function() r:FireServer() end) end
 
-    -- scope in
     r = getRemote(RE, "ScopeState")
     if r then pcall(function() r:FireServer(true) end) end
 
-    -- attack all enemies
     r = getRemote(RE, "BrainrotAttack")
     if r then
-        for _, folderName in pairs({"Enemies","Mobs","Brainrots","NPCs","Targets"}) do
-            local folder = workspace:FindFirstChild(folderName)
+        for _, name in pairs({"Enemies","Mobs","Brainrots","NPCs","Targets"}) do
+            local folder = workspace:FindFirstChild(name)
             if folder then
                 for _, enemy in pairs(folder:GetChildren()) do
                     local part = enemy:FindFirstChild("HumanoidRootPart") or enemy:FindFirstChild("Head") or enemy:FindFirstChildWhichIsA("BasePart")
@@ -156,7 +139,6 @@ local function doAutoShoot()
         end
     end
 
-    -- hit balloons
     local bh = getRemote(RE, "BalloonHit")
     if bh then
         local balloons = workspace:FindFirstChild("Balloons")
@@ -167,14 +149,12 @@ local function doAutoShoot()
         end
     end
 
-    -- send drone
     r = getRemote(RE, "DroneCreate")
     if r then
         pcall(function() r:FireServer(Config.SelectedArea) end)
         pcall(function() r:FireServer() end)
     end
 
-    -- scope out
     r = getRemote(RE, "ScopeState")
     if r then pcall(function() r:FireServer(false) end) end
 end
@@ -183,10 +163,8 @@ local function doCollectCash()
     if not RE then return end
     local r = getRemote(RE, "ClaimGold")
     if r then pcall(function() r:FireServer() end) end
-
     r = getRemote(RE, "DroneClaim")
     if r then pcall(function() r:FireServer() end) end
-
     if RF then
         local f = getRemote(RF, "DroneCapture")
         if f then pcall(function() f:InvokeServer() end) end
@@ -197,7 +175,6 @@ end
 
 local function doUpgradeAll()
     if not RE then return end
-
     local shot = getRemote(RE, "ShotLevelUp")
     local shield = getRemote(RE, "ShieldLevelUp")
     local drone = getRemote(RE, "DroneLevelUp")
@@ -244,6 +221,3 @@ SG.Destroying:Connect(function() Running=false end)
 UIS.InputBegan:Connect(function(i,g)
     if not g and i.KeyCode==Enum.KeyCode.RightControl then SG.Enabled=not SG.Enabled end
 end)
-
-print("[BRAINROT SNIPER v3] GUI loaded — remotes loading in background")
-print("[BRAINROT SNIPER v3] Right Ctrl to toggle GUI")
