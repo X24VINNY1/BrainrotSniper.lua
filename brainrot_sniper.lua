@@ -1,109 +1,216 @@
 --[[
-    BRAINROT SNIPER — Xeno Executor
-    oil up gng
+    BRAINROT SNIPER v2 — Xeno Executor
+    real remotes, real game structure
+    oil up gng 6767
 ]]
 local Players = game:GetService("Players")
 local RS = game:GetService("ReplicatedStorage")
 local UIS = game:GetService("UserInputService")
-local VIM = game:GetService("VirtualInputManager")
+local RunService = game:GetService("RunService")
 local LP = Players.LocalPlayer
 
-local Config = {Area=12, AutoShoot=false, CollectCash=false, UpgradeAll=false, AutoRebirth=false}
+-- ══════ REMOTE PATHS ══════
+local NetFolder = RS:WaitForChild("Shared"):WaitForChild("Packages"):WaitForChild("Net")
+local RE = NetFolder:WaitForChild("RE")
+local RF = NetFolder:WaitForChild("RF")
+
+-- Remote Events
+local RE_BrainrotAttack = RE:WaitForChild("BrainrotAttack")
+local RE_ClaimGold = RE:WaitForChild("ClaimGold")
+local RE_RebirthUp = RE:WaitForChild("RebirthUp")
+local RE_ShotLevelUp = RE:WaitForChild("ShotLevelUp")
+local RE_ShieldLevelUp = RE:WaitForChild("ShieldLevelUp")
+local RE_DroneLevelUp = RE:WaitForChild("DroneLevelUp")
+local RE_UpgradeBrainrot = RE:WaitForChild("UpgradeBrainrot")
+local RE_LoadPosition = RE:WaitForChild("LoadPosition")
+local RE_EquipBestBrainrot = RE:WaitForChild("EquipBestBrainrot")
+local RE_PlaceBrainrot = RE:WaitForChild("PlaceBrainrot")
+local RE_DroneCreate = RE:WaitForChild("DroneCreate")
+local RE_DroneClaim = RE:WaitForChild("DroneClaim")
+local RE_DroneHit = RE:WaitForChild("DroneHit")
+local RE_ScopeState = RE:WaitForChild("ScopeState")
+local RE_SellAllBrainrot = RE:WaitForChild("SellAllBrainrot")
+
+-- Remote Functions
+local RF_DroneCapture = RF:WaitForChild("DroneCapture")
+local RF_DroneRequest = RF:WaitForChild("DroneRequest")
+
+-- ══════ CONFIG ══════
+local Config = {
+    SelectedArea = 12,
+    AutoShoot = false,
+    CollectCash = false,
+    UpgradeAll = false,
+    AutoRebirth = false,
+}
 local Running = true
 
-local function findRemote(name, cls)
-    cls = cls or "RemoteEvent"
-    for _,v in pairs(RS:GetDescendants()) do
-        if v:IsA(cls) and v.Name:lower():find(name:lower()) then return v end
-    end
-    for _,v in pairs(game:GetDescendants()) do
-        if v:IsA(cls) and v.Name:lower():find(name:lower()) then return v end
-    end
+-- ══════ CORE FUNCTIONS ══════
+
+-- Select Area: fire LoadPosition to teleport to area
+local function teleportArea(areaNum)
+    pcall(function()
+        RE_LoadPosition:FireServer(areaNum)
+    end)
 end
 
-local function teleportArea(n)
-    local r = findRemote("area") or findRemote("teleport") or findRemote("travel")
-    if r then r:FireServer(n) return end
-    local a = workspace:FindFirstChild("Areas") or workspace:FindFirstChild("Zones") or workspace:FindFirstChild("Map")
-    if a then
-        for _,c in pairs(a:GetChildren()) do
-            if c.Name:find(tostring(n)) then
-                local t = c:FindFirstChild("Spawn") or c:FindFirstChildWhichIsA("BasePart")
-                if t and LP.Character and LP.Character:FindFirstChild("HumanoidRootPart") then
-                    LP.Character.HumanoidRootPart.CFrame = t.CFrame + Vector3.new(0,5,0)
+-- Auto Shoot: scope in, find brainrots, attack them, equip best, send drone
+local function doAutoShoot()
+    -- equip best brainrot
+    pcall(function()
+        RE_EquipBestBrainrot:FireServer()
+    end)
+
+    -- scope in
+    pcall(function()
+        RE_ScopeState:FireServer(true)
+    end)
+
+    -- find enemies in workspace and attack
+    local enemyFolders = {
+        workspace:FindFirstChild("Enemies"),
+        workspace:FindFirstChild("Mobs"),
+        workspace:FindFirstChild("Brainrots"),
+        workspace:FindFirstChild("NPCs"),
+        workspace:FindFirstChild("Targets"),
+    }
+
+    for _, folder in pairs(enemyFolders) do
+        if folder then
+            for _, enemy in pairs(folder:GetChildren()) do
+                local targetPart = enemy:FindFirstChild("HumanoidRootPart")
+                    or enemy:FindFirstChild("Head")
+                    or enemy:FindFirstChildWhichIsA("BasePart")
+                if targetPart then
+                    pcall(function()
+                        RE_BrainrotAttack:FireServer(enemy)
+                    end)
+                    pcall(function()
+                        RE_BrainrotAttack:FireServer(targetPart.Position)
+                    end)
+                    pcall(function()
+                        RE_BrainrotAttack:FireServer(enemy, targetPart.Position)
+                    end)
                 end
-                break
             end
         end
     end
+
+    -- also try balloon hits (some areas use balloons)
+    pcall(function()
+        local balloons = workspace:FindFirstChild("Balloons")
+        if balloons then
+            for _, balloon in pairs(balloons:GetChildren()) do
+                local part = balloon:FindFirstChildWhichIsA("BasePart")
+                if part then
+                    local RE_BalloonHit = RE:FindFirstChild("BalloonHit")
+                    if RE_BalloonHit then
+                        RE_BalloonHit:FireServer(balloon)
+                    end
+                end
+            end
+        end
+    end)
+
+    -- send drone to area
+    pcall(function()
+        RE_DroneCreate:FireServer(Config.SelectedArea)
+    end)
+    pcall(function()
+        RE_DroneCreate:FireServer()
+    end)
+
+    -- scope out
+    pcall(function()
+        RE_ScopeState:FireServer(false)
+    end)
 end
 
-local function doShoot()
-    local r = findRemote("shoot") or findRemote("fire") or findRemote("attack") or findRemote("hit")
-    local ef = workspace:FindFirstChild("Enemies") or workspace:FindFirstChild("Mobs") or workspace:FindFirstChild("NPCs") or workspace:FindFirstChild("Targets") or workspace:FindFirstChild("Brainrots")
-    local hrp = LP.Character and LP.Character:FindFirstChild("HumanoidRootPart")
-    if not hrp then return end
-    if r and ef then
-        local best,bd = nil,math.huge
-        for _,e in pairs(ef:GetChildren()) do
-            local p = e:FindFirstChildWhichIsA("BasePart") or e:FindFirstChild("HumanoidRootPart")
-            if p then local d=(hrp.Position-p.Position).Magnitude; if d<bd then bd=d;best=e end end
-        end
-        if best then
-            pcall(function() r:FireServer(best) end)
-            local tp = best:FindFirstChildWhichIsA("BasePart")
-            if tp then pcall(function() r:FireServer(tp.Position) end); pcall(function() r:FireServer(best,tp.Position) end) end
-        end
-    else
+-- Collect Cash: claim gold + drone claims
+local function doCollectCash()
+    pcall(function()
+        RE_ClaimGold:FireServer()
+    end)
+    pcall(function()
+        RE_DroneClaim:FireServer()
+    end)
+    -- try drone capture/request
+    pcall(function()
+        RF_DroneCapture:InvokeServer()
+    end)
+    pcall(function()
+        RF_DroneRequest:InvokeServer()
+    end)
+end
+
+-- Upgrade All: sniper, shield, drone, brainrots
+local function doUpgradeAll()
+    -- upgrade sniper (shot level)
+    for i = 1, 5 do
         pcall(function()
-            local vs = workspace.CurrentCamera.ViewportSize
-            VIM:SendMouseButtonEvent(vs.X/2,vs.Y/2,0,true,game,1)
-            task.wait(0.05)
-            VIM:SendMouseButtonEvent(vs.X/2,vs.Y/2,0,false,game,1)
+            RE_ShotLevelUp:FireServer()
+        end)
+        pcall(function()
+            RE_ShotLevelUp:FireServer(i)
         end)
     end
-end
 
-local function doCash()
-    local r = findRemote("collect") or findRemote("pickup") or findRemote("claim") or findRemote("cash")
-    if r then pcall(function() r:FireServer() end) end
-    local df = workspace:FindFirstChild("Drops") or workspace:FindFirstChild("Cash") or workspace:FindFirstChild("Coins") or workspace:FindFirstChild("Loot")
-    if df then
-        local hrp = LP.Character and LP.Character:FindFirstChild("HumanoidRootPart")
-        if not hrp then return end
-        local orig = hrp.CFrame
-        for _,d in pairs(df:GetChildren()) do
-            local p = d:IsA("BasePart") and d or d:FindFirstChildWhichIsA("BasePart")
-            if p then pcall(function() hrp.CFrame=p.CFrame; task.wait(); firetouchinterest(hrp,p,0); task.wait(); firetouchinterest(hrp,p,1) end) end
-        end
-        pcall(function() hrp.CFrame=orig end)
+    -- upgrade shield
+    for i = 1, 5 do
+        pcall(function()
+            RE_ShieldLevelUp:FireServer()
+        end)
+        pcall(function()
+            RE_ShieldLevelUp:FireServer(i)
+        end)
     end
-end
 
-local function doUpgrade()
-    local r = findRemote("upgrade") or findRemote("buy") or findRemote("level")
-    if r then
-        for _,s in pairs({"Damage","Range","FireRate","Speed","Power","damage","range","firerate","speed","power",1,2,3,4,5,6,7,8,9,10}) do
-            pcall(function() r:FireServer(s) end)
-            pcall(function() r:FireServer(s,1) end)
-        end
+    -- upgrade drones
+    for i = 1, 5 do
+        pcall(function()
+            RE_DroneLevelUp:FireServer()
+        end)
+        pcall(function()
+            RE_DroneLevelUp:FireServer(i)
+        end)
     end
+
+    -- upgrade brainrots
+    for i = 1, 10 do
+        pcall(function()
+            RE_UpgradeBrainrot:FireServer(i)
+        end)
+    end
+    pcall(function()
+        RE_UpgradeBrainrot:FireServer()
+    end)
+
+    -- equip best
+    pcall(function()
+        RE_EquipBestBrainrot:FireServer()
+    end)
 end
 
+-- Auto Rebirth
 local function doRebirth()
-    local r = findRemote("rebirth") or findRemote("prestige") or findRemote("reset")
-    if r then pcall(function() r:FireServer() end); pcall(function() r:FireServer("Rebirth") end); pcall(function() r:FireServer(true) end) end
+    pcall(function()
+        RE_RebirthUp:FireServer()
+    end)
+    pcall(function()
+        RE_RebirthUp:FireServer(true)
+    end)
 end
 
 -- ══════ GUI ══════
 local old = LP.PlayerGui:FindFirstChild("BSGUI"); if old then old:Destroy() end
 local SG = Instance.new("ScreenGui"); SG.Name="BSGUI"; SG.ResetOnSpawn=false; SG.Parent=LP.PlayerGui
 
-local MF = Instance.new("Frame"); MF.Size=UDim2.new(0,260,0,240); MF.Position=UDim2.new(0.02,0,0.3,0)
+local MF = Instance.new("Frame"); MF.Size=UDim2.new(0,260,0,250); MF.Position=UDim2.new(0.02,0,0.3,0)
 MF.BackgroundColor3=Color3.fromRGB(25,25,30); MF.BorderSizePixel=0; MF.Active=true; MF.Draggable=true; MF.Parent=SG
 Instance.new("UICorner",MF).CornerRadius=UDim.new(0,6)
 local s=Instance.new("UIStroke",MF); s.Color=Color3.fromRGB(60,60,70)
 
+-- Title bar
 local TB=Instance.new("Frame",MF); TB.Size=UDim2.new(1,0,0,35); TB.BackgroundColor3=Color3.fromRGB(20,20,25); TB.BorderSizePixel=0
 Instance.new("UICorner",TB).CornerRadius=UDim.new(0,6)
 local tc=Instance.new("Frame",TB); tc.Size=UDim2.new(1,0,0,8); tc.Position=UDim2.new(0,0,1,-8); tc.BackgroundColor3=Color3.fromRGB(20,20,25); tc.BorderSizePixel=0
@@ -113,19 +220,29 @@ TL.TextColor3=Color3.fromRGB(255,255,255); TL.Size=UDim2.new(1,-40,1,0); TL.Posi
 
 local MB=Instance.new("TextButton",TB); MB.Text="▼"; MB.Font=Enum.Font.GothamBold; MB.TextSize=12; MB.TextColor3=Color3.fromRGB(180,180,180)
 MB.Size=UDim2.new(0,30,0,30); MB.Position=UDim2.new(1,-35,0,3); MB.BackgroundTransparency=1
-local min=false; MB.MouseButton1Click:Connect(function() min=not min; MF.Size=min and UDim2.new(0,260,0,35) or UDim2.new(0,260,0,240); MB.Text=min and "▶" or "▼" end)
+local min=false; MB.MouseButton1Click:Connect(function() min=not min; MF.Size=min and UDim2.new(0,260,0,35) or UDim2.new(0,260,0,250); MB.Text=min and "▶" or "▼" end)
 
+-- Content
 local C=Instance.new("Frame",MF); C.Size=UDim2.new(1,-20,1,-45); C.Position=UDim2.new(0,10,0,40); C.BackgroundTransparency=1
 Instance.new("UIListLayout",C).Padding=UDim.new(0,6)
 
--- Area row
+-- Area selector
 local ar=Instance.new("Frame",C); ar.Size=UDim2.new(1,0,0,30); ar.BackgroundTransparency=1; ar.LayoutOrder=0
 local al=Instance.new("TextLabel",ar); al.Text="Select Area"; al.Font=Enum.Font.Gotham; al.TextSize=14; al.TextColor3=Color3.fromRGB(220,220,220)
 al.Size=UDim2.new(0.6,0,1,0); al.BackgroundTransparency=1; al.TextXAlignment=Enum.TextXAlignment.Left
-local ab=Instance.new("TextBox",ar); ab.Text=tostring(Config.Area); ab.Font=Enum.Font.GothamBold; ab.TextSize=14; ab.TextColor3=Color3.fromRGB(255,255,255)
+local ab=Instance.new("TextBox",ar); ab.Text=tostring(Config.SelectedArea); ab.Font=Enum.Font.GothamBold; ab.TextSize=14; ab.TextColor3=Color3.fromRGB(255,255,255)
 ab.Size=UDim2.new(0,50,0,26); ab.Position=UDim2.new(1,-55,0,2); ab.BackgroundColor3=Color3.fromRGB(40,40,50); ab.BorderSizePixel=0
 Instance.new("UICorner",ab).CornerRadius=UDim.new(0,4)
-ab.FocusLost:Connect(function() local n=tonumber(ab.Text); if n and n>=1 then Config.Area=math.floor(n); ab.Text=tostring(Config.Area); teleportArea(Config.Area) else ab.Text=tostring(Config.Area) end end)
+ab.FocusLost:Connect(function()
+    local n=tonumber(ab.Text)
+    if n and n>=1 and n<=15 then
+        Config.SelectedArea=math.floor(n)
+        ab.Text=tostring(Config.SelectedArea)
+        teleportArea(Config.SelectedArea)
+    else
+        ab.Text=tostring(Config.SelectedArea)
+    end
+end)
 
 -- Toggle factory
 local function mkToggle(name,ord,key)
@@ -150,13 +267,40 @@ mkToggle("Upgrade All",3,"UpgradeAll")
 mkToggle("Auto Rebirth",4,"AutoRebirth")
 
 -- ══════ LOOPS ══════
-task.spawn(function() while Running and task.wait(0.1) do if Config.AutoShoot then pcall(doShoot) end end end)
-task.spawn(function() while Running and task.wait(1) do
-    if Config.CollectCash then pcall(doCash) end
-    if Config.UpgradeAll then pcall(doUpgrade) end
-    if Config.AutoRebirth then pcall(doRebirth) end
-end end)
 
+-- Fast loop: auto shoot (every 0.15s)
+task.spawn(function()
+    while Running and task.wait(0.15) do
+        if Config.AutoShoot then
+            pcall(doAutoShoot)
+        end
+    end
+end)
+
+-- Slow loop: cash, upgrades, rebirth (every 1.5s)
+task.spawn(function()
+    while Running and task.wait(1.5) do
+        if Config.CollectCash then
+            pcall(doCollectCash)
+        end
+        if Config.UpgradeAll then
+            pcall(doUpgradeAll)
+        end
+        if Config.AutoRebirth then
+            pcall(doRebirth)
+        end
+    end
+end)
+
+-- Cleanup
 SG.Destroying:Connect(function() Running=false end)
-UIS.InputBegan:Connect(function(i,g) if not g and i.KeyCode==Enum.KeyCode.RightControl then SG.Enabled=not SG.Enabled end end)
-print("[BRAINROT SNIPER] loaded — Right Ctrl to toggle GUI")
+
+-- Right Ctrl toggles GUI
+UIS.InputBegan:Connect(function(i,g)
+    if not g and i.KeyCode==Enum.KeyCode.RightControl then
+        SG.Enabled=not SG.Enabled
+    end
+end)
+
+print("[BRAINROT SNIPER v2] loaded — real remotes, oil up gng")
+print("[BRAINROT SNIPER v2] Right Ctrl to toggle GUI")
