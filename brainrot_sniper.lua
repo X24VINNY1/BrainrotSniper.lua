@@ -1,39 +1,12 @@
 --[[
-    BRAINROT SNIPER v2 — Xeno Executor
-    real remotes, real game structure
+    BRAINROT SNIPER v3 — Xeno Executor
+    real remotes — GUI loads first
     oil up gng 6767
 ]]
 local Players = game:GetService("Players")
 local RS = game:GetService("ReplicatedStorage")
 local UIS = game:GetService("UserInputService")
-local RunService = game:GetService("RunService")
 local LP = Players.LocalPlayer
-
--- ══════ REMOTE PATHS ══════
-local NetFolder = RS:WaitForChild("Shared"):WaitForChild("Packages"):WaitForChild("Net")
-local RE = NetFolder:WaitForChild("RE")
-local RF = NetFolder:WaitForChild("RF")
-
--- Remote Events
-local RE_BrainrotAttack = RE:WaitForChild("BrainrotAttack")
-local RE_ClaimGold = RE:WaitForChild("ClaimGold")
-local RE_RebirthUp = RE:WaitForChild("RebirthUp")
-local RE_ShotLevelUp = RE:WaitForChild("ShotLevelUp")
-local RE_ShieldLevelUp = RE:WaitForChild("ShieldLevelUp")
-local RE_DroneLevelUp = RE:WaitForChild("DroneLevelUp")
-local RE_UpgradeBrainrot = RE:WaitForChild("UpgradeBrainrot")
-local RE_LoadPosition = RE:WaitForChild("LoadPosition")
-local RE_EquipBestBrainrot = RE:WaitForChild("EquipBestBrainrot")
-local RE_PlaceBrainrot = RE:WaitForChild("PlaceBrainrot")
-local RE_DroneCreate = RE:WaitForChild("DroneCreate")
-local RE_DroneClaim = RE:WaitForChild("DroneClaim")
-local RE_DroneHit = RE:WaitForChild("DroneHit")
-local RE_ScopeState = RE:WaitForChild("ScopeState")
-local RE_SellAllBrainrot = RE:WaitForChild("SellAllBrainrot")
-
--- Remote Functions
-local RF_DroneCapture = RF:WaitForChild("DroneCapture")
-local RF_DroneRequest = RF:WaitForChild("DroneRequest")
 
 -- ══════ CONFIG ══════
 local Config = {
@@ -45,163 +18,7 @@ local Config = {
 }
 local Running = true
 
--- ══════ CORE FUNCTIONS ══════
-
--- Select Area: fire LoadPosition to teleport to area
-local function teleportArea(areaNum)
-    pcall(function()
-        RE_LoadPosition:FireServer(areaNum)
-    end)
-end
-
--- Auto Shoot: scope in, find brainrots, attack them, equip best, send drone
-local function doAutoShoot()
-    -- equip best brainrot
-    pcall(function()
-        RE_EquipBestBrainrot:FireServer()
-    end)
-
-    -- scope in
-    pcall(function()
-        RE_ScopeState:FireServer(true)
-    end)
-
-    -- find enemies in workspace and attack
-    local enemyFolders = {
-        workspace:FindFirstChild("Enemies"),
-        workspace:FindFirstChild("Mobs"),
-        workspace:FindFirstChild("Brainrots"),
-        workspace:FindFirstChild("NPCs"),
-        workspace:FindFirstChild("Targets"),
-    }
-
-    for _, folder in pairs(enemyFolders) do
-        if folder then
-            for _, enemy in pairs(folder:GetChildren()) do
-                local targetPart = enemy:FindFirstChild("HumanoidRootPart")
-                    or enemy:FindFirstChild("Head")
-                    or enemy:FindFirstChildWhichIsA("BasePart")
-                if targetPart then
-                    pcall(function()
-                        RE_BrainrotAttack:FireServer(enemy)
-                    end)
-                    pcall(function()
-                        RE_BrainrotAttack:FireServer(targetPart.Position)
-                    end)
-                    pcall(function()
-                        RE_BrainrotAttack:FireServer(enemy, targetPart.Position)
-                    end)
-                end
-            end
-        end
-    end
-
-    -- also try balloon hits (some areas use balloons)
-    pcall(function()
-        local balloons = workspace:FindFirstChild("Balloons")
-        if balloons then
-            for _, balloon in pairs(balloons:GetChildren()) do
-                local part = balloon:FindFirstChildWhichIsA("BasePart")
-                if part then
-                    local RE_BalloonHit = RE:FindFirstChild("BalloonHit")
-                    if RE_BalloonHit then
-                        RE_BalloonHit:FireServer(balloon)
-                    end
-                end
-            end
-        end
-    end)
-
-    -- send drone to area
-    pcall(function()
-        RE_DroneCreate:FireServer(Config.SelectedArea)
-    end)
-    pcall(function()
-        RE_DroneCreate:FireServer()
-    end)
-
-    -- scope out
-    pcall(function()
-        RE_ScopeState:FireServer(false)
-    end)
-end
-
--- Collect Cash: claim gold + drone claims
-local function doCollectCash()
-    pcall(function()
-        RE_ClaimGold:FireServer()
-    end)
-    pcall(function()
-        RE_DroneClaim:FireServer()
-    end)
-    -- try drone capture/request
-    pcall(function()
-        RF_DroneCapture:InvokeServer()
-    end)
-    pcall(function()
-        RF_DroneRequest:InvokeServer()
-    end)
-end
-
--- Upgrade All: sniper, shield, drone, brainrots
-local function doUpgradeAll()
-    -- upgrade sniper (shot level)
-    for i = 1, 5 do
-        pcall(function()
-            RE_ShotLevelUp:FireServer()
-        end)
-        pcall(function()
-            RE_ShotLevelUp:FireServer(i)
-        end)
-    end
-
-    -- upgrade shield
-    for i = 1, 5 do
-        pcall(function()
-            RE_ShieldLevelUp:FireServer()
-        end)
-        pcall(function()
-            RE_ShieldLevelUp:FireServer(i)
-        end)
-    end
-
-    -- upgrade drones
-    for i = 1, 5 do
-        pcall(function()
-            RE_DroneLevelUp:FireServer()
-        end)
-        pcall(function()
-            RE_DroneLevelUp:FireServer(i)
-        end)
-    end
-
-    -- upgrade brainrots
-    for i = 1, 10 do
-        pcall(function()
-            RE_UpgradeBrainrot:FireServer(i)
-        end)
-    end
-    pcall(function()
-        RE_UpgradeBrainrot:FireServer()
-    end)
-
-    -- equip best
-    pcall(function()
-        RE_EquipBestBrainrot:FireServer()
-    end)
-end
-
--- Auto Rebirth
-local function doRebirth()
-    pcall(function()
-        RE_RebirthUp:FireServer()
-    end)
-    pcall(function()
-        RE_RebirthUp:FireServer(true)
-    end)
-end
-
--- ══════ GUI ══════
+-- ══════ GUI FIRST (so it always shows) ══════
 local old = LP.PlayerGui:FindFirstChild("BSGUI"); if old then old:Destroy() end
 local SG = Instance.new("ScreenGui"); SG.Name="BSGUI"; SG.ResetOnSpawn=false; SG.Parent=LP.PlayerGui
 
@@ -210,7 +27,6 @@ MF.BackgroundColor3=Color3.fromRGB(25,25,30); MF.BorderSizePixel=0; MF.Active=tr
 Instance.new("UICorner",MF).CornerRadius=UDim.new(0,6)
 local s=Instance.new("UIStroke",MF); s.Color=Color3.fromRGB(60,60,70)
 
--- Title bar
 local TB=Instance.new("Frame",MF); TB.Size=UDim2.new(1,0,0,35); TB.BackgroundColor3=Color3.fromRGB(20,20,25); TB.BorderSizePixel=0
 Instance.new("UICorner",TB).CornerRadius=UDim.new(0,6)
 local tc=Instance.new("Frame",TB); tc.Size=UDim2.new(1,0,0,8); tc.Position=UDim2.new(0,0,1,-8); tc.BackgroundColor3=Color3.fromRGB(20,20,25); tc.BorderSizePixel=0
@@ -220,9 +36,8 @@ TL.TextColor3=Color3.fromRGB(255,255,255); TL.Size=UDim2.new(1,-40,1,0); TL.Posi
 
 local MB=Instance.new("TextButton",TB); MB.Text="▼"; MB.Font=Enum.Font.GothamBold; MB.TextSize=12; MB.TextColor3=Color3.fromRGB(180,180,180)
 MB.Size=UDim2.new(0,30,0,30); MB.Position=UDim2.new(1,-35,0,3); MB.BackgroundTransparency=1
-local min=false; MB.MouseButton1Click:Connect(function() min=not min; MF.Size=min and UDim2.new(0,260,0,35) or UDim2.new(0,260,0,250); MB.Text=min and "▶" or "▼" end)
+local isMin=false; MB.MouseButton1Click:Connect(function() isMin=not isMin; MF.Size=isMin and UDim2.new(0,260,0,35) or UDim2.new(0,260,0,250); MB.Text=isMin and "▶" or "▼" end)
 
--- Content
 local C=Instance.new("Frame",MF); C.Size=UDim2.new(1,-20,1,-45); C.Position=UDim2.new(0,10,0,40); C.BackgroundTransparency=1
 Instance.new("UIListLayout",C).Padding=UDim.new(0,6)
 
@@ -233,16 +48,6 @@ al.Size=UDim2.new(0.6,0,1,0); al.BackgroundTransparency=1; al.TextXAlignment=Enu
 local ab=Instance.new("TextBox",ar); ab.Text=tostring(Config.SelectedArea); ab.Font=Enum.Font.GothamBold; ab.TextSize=14; ab.TextColor3=Color3.fromRGB(255,255,255)
 ab.Size=UDim2.new(0,50,0,26); ab.Position=UDim2.new(1,-55,0,2); ab.BackgroundColor3=Color3.fromRGB(40,40,50); ab.BorderSizePixel=0
 Instance.new("UICorner",ab).CornerRadius=UDim.new(0,4)
-ab.FocusLost:Connect(function()
-    local n=tonumber(ab.Text)
-    if n and n>=1 and n<=15 then
-        Config.SelectedArea=math.floor(n)
-        ab.Text=tostring(Config.SelectedArea)
-        teleportArea(Config.SelectedArea)
-    else
-        ab.Text=tostring(Config.SelectedArea)
-    end
-end)
 
 -- Toggle factory
 local function mkToggle(name,ord,key)
@@ -266,41 +71,179 @@ mkToggle("Collect Cash",2,"CollectCash")
 mkToggle("Upgrade All",3,"UpgradeAll")
 mkToggle("Auto Rebirth",4,"AutoRebirth")
 
--- ══════ LOOPS ══════
+-- ══════ GRAB REMOTES (safe, no hang) ══════
+local RE, RF
 
--- Fast loop: auto shoot (every 0.15s)
+local function getRemote(folder, name)
+    if not folder then return nil end
+    return folder:FindFirstChild(name)
+end
+
 task.spawn(function()
-    while Running and task.wait(0.15) do
-        if Config.AutoShoot then
-            pcall(doAutoShoot)
+    -- wait for net folder with timeout
+    local net = RS:FindFirstChild("Shared")
+    if net then net = net:FindFirstChild("Packages") end
+    if net then net = net:FindFirstChild("Net") end
+
+    -- if not found immediately, wait a bit
+    if not net then
+        for i = 1, 30 do
+            task.wait(0.5)
+            net = RS:FindFirstChild("Shared")
+            if net then net = net:FindFirstChild("Packages") end
+            if net then net = net:FindFirstChild("Net") end
+            if net then break end
         end
+    end
+
+    if not net then
+        warn("[BRAINROT SNIPER] could not find Net folder")
+        return
+    end
+
+    RE = net:FindFirstChild("RE")
+    RF = net:FindFirstChild("RF")
+
+    if RE then
+        print("[BRAINROT SNIPER] remotes loaded — ready to go")
+    else
+        warn("[BRAINROT SNIPER] RE folder not found")
     end
 end)
 
--- Slow loop: cash, upgrades, rebirth (every 1.5s)
+-- ══════ AREA SELECT ══════
+ab.FocusLost:Connect(function()
+    local n=tonumber(ab.Text)
+    if n and n>=1 and n<=15 then
+        Config.SelectedArea=math.floor(n)
+        ab.Text=tostring(Config.SelectedArea)
+        if RE then
+            local r = getRemote(RE, "LoadPosition")
+            if r then pcall(function() r:FireServer(Config.SelectedArea) end) end
+        end
+    else
+        ab.Text=tostring(Config.SelectedArea)
+    end
+end)
+
+-- ══════ CORE FUNCTIONS ══════
+local function doAutoShoot()
+    if not RE then return end
+
+    -- equip best brainrot
+    local r = getRemote(RE, "EquipBestBrainrot")
+    if r then pcall(function() r:FireServer() end) end
+
+    -- scope in
+    r = getRemote(RE, "ScopeState")
+    if r then pcall(function() r:FireServer(true) end) end
+
+    -- attack all enemies
+    r = getRemote(RE, "BrainrotAttack")
+    if r then
+        for _, folderName in pairs({"Enemies","Mobs","Brainrots","NPCs","Targets"}) do
+            local folder = workspace:FindFirstChild(folderName)
+            if folder then
+                for _, enemy in pairs(folder:GetChildren()) do
+                    local part = enemy:FindFirstChild("HumanoidRootPart") or enemy:FindFirstChild("Head") or enemy:FindFirstChildWhichIsA("BasePart")
+                    if part then
+                        pcall(function() r:FireServer(enemy) end)
+                        pcall(function() r:FireServer(part.Position) end)
+                        pcall(function() r:FireServer(enemy, part.Position) end)
+                    end
+                end
+            end
+        end
+    end
+
+    -- hit balloons
+    local bh = getRemote(RE, "BalloonHit")
+    if bh then
+        local balloons = workspace:FindFirstChild("Balloons")
+        if balloons then
+            for _, b in pairs(balloons:GetChildren()) do
+                pcall(function() bh:FireServer(b) end)
+            end
+        end
+    end
+
+    -- send drone
+    r = getRemote(RE, "DroneCreate")
+    if r then
+        pcall(function() r:FireServer(Config.SelectedArea) end)
+        pcall(function() r:FireServer() end)
+    end
+
+    -- scope out
+    r = getRemote(RE, "ScopeState")
+    if r then pcall(function() r:FireServer(false) end) end
+end
+
+local function doCollectCash()
+    if not RE then return end
+    local r = getRemote(RE, "ClaimGold")
+    if r then pcall(function() r:FireServer() end) end
+
+    r = getRemote(RE, "DroneClaim")
+    if r then pcall(function() r:FireServer() end) end
+
+    if RF then
+        local f = getRemote(RF, "DroneCapture")
+        if f then pcall(function() f:InvokeServer() end) end
+        f = getRemote(RF, "DroneRequest")
+        if f then pcall(function() f:InvokeServer() end) end
+    end
+end
+
+local function doUpgradeAll()
+    if not RE then return end
+
+    local shot = getRemote(RE, "ShotLevelUp")
+    local shield = getRemote(RE, "ShieldLevelUp")
+    local drone = getRemote(RE, "DroneLevelUp")
+    local brainrot = getRemote(RE, "UpgradeBrainrot")
+    local equip = getRemote(RE, "EquipBestBrainrot")
+
+    for i = 1, 5 do
+        if shot then pcall(function() shot:FireServer() end); pcall(function() shot:FireServer(i) end) end
+        if shield then pcall(function() shield:FireServer() end); pcall(function() shield:FireServer(i) end) end
+        if drone then pcall(function() drone:FireServer() end); pcall(function() drone:FireServer(i) end) end
+    end
+    for i = 1, 10 do
+        if brainrot then pcall(function() brainrot:FireServer(i) end) end
+    end
+    if brainrot then pcall(function() brainrot:FireServer() end) end
+    if equip then pcall(function() equip:FireServer() end) end
+end
+
+local function doRebirth()
+    if not RE then return end
+    local r = getRemote(RE, "RebirthUp")
+    if r then
+        pcall(function() r:FireServer() end)
+        pcall(function() r:FireServer(true) end)
+    end
+end
+
+-- ══════ LOOPS ══════
+task.spawn(function()
+    while Running and task.wait(0.2) do
+        if Config.AutoShoot then pcall(doAutoShoot) end
+    end
+end)
+
 task.spawn(function()
     while Running and task.wait(1.5) do
-        if Config.CollectCash then
-            pcall(doCollectCash)
-        end
-        if Config.UpgradeAll then
-            pcall(doUpgradeAll)
-        end
-        if Config.AutoRebirth then
-            pcall(doRebirth)
-        end
+        if Config.CollectCash then pcall(doCollectCash) end
+        if Config.UpgradeAll then pcall(doUpgradeAll) end
+        if Config.AutoRebirth then pcall(doRebirth) end
     end
 end)
 
--- Cleanup
 SG.Destroying:Connect(function() Running=false end)
-
--- Right Ctrl toggles GUI
 UIS.InputBegan:Connect(function(i,g)
-    if not g and i.KeyCode==Enum.KeyCode.RightControl then
-        SG.Enabled=not SG.Enabled
-    end
+    if not g and i.KeyCode==Enum.KeyCode.RightControl then SG.Enabled=not SG.Enabled end
 end)
 
-print("[BRAINROT SNIPER v2] loaded — real remotes, oil up gng")
-print("[BRAINROT SNIPER v2] Right Ctrl to toggle GUI")
+print("[BRAINROT SNIPER v3] GUI loaded — remotes loading in background")
+print("[BRAINROT SNIPER v3] Right Ctrl to toggle GUI")
